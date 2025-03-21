@@ -17,8 +17,8 @@ const OnboardingScreen = () => {
   };
 
   const handleSignIn = () => {
-    navigation.navigate('SignIn');  // Navigate to SignIn screen
-  };
+    navigation.navigate('GoogleLogin');
+  };  
 
   return (
     <View style={styles.container}>

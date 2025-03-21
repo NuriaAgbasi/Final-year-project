@@ -1,17 +1,42 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, Button, StyleSheet, Alert } from 'react-native';
-import { createUserWithEmailAndPassword } from "firebase/auth";
-import { auth } from '../firebaseConfig';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { createUserWithEmailAndPassword, sendEmailVerification } from "firebase/auth";
+import { auth } from '../firebaseConfig'; // Make sure to import your Firebase config
+import { Ionicons } from '@expo/vector-icons';
+import BackButton from '../components/BackButton';
 
 export default function SignUpScreen({ navigation }) {
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleSignUp = async () => {
+    // Check if passwords match
+    if (password !== confirmPassword) {
+      Alert.alert("Error", "Passwords do not match");
+      return;
+    }
+
     try {
-      await createUserWithEmailAndPassword(auth, email, password);
-      Alert.alert("Success", "Account created! You can now log in.");
+      // Create user with email and password
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
+      // Send email verification link
+      await sendEmailVerification(user);
+
+      // Show a message to inform the user to check their email
+      Alert.alert(
+        "Verify Your Email",
+        "A verification link has been sent to your email. Please verify before logging in."
+      );
+
+      // Navigate to the login screen after successful signup
       navigation.navigate("Login");
+
     } catch (error) {
       Alert.alert("Error", error.message);
     }
@@ -19,17 +44,146 @@ export default function SignUpScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Sign Up</Text>
-      <TextInput style={styles.input} placeholder="Email" value={email} onChangeText={setEmail} keyboardType="email-address" />
-      <TextInput style={styles.input} placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry />
-      <Button title="Sign Up" onPress={handleSignUp} />
-      <Button title="Go to Login" onPress={() => navigation.navigate('Login')} />
+      <BackButton onPress={() => navigation.goBack()} />
+
+      {/* Title */}
+      <Text style={styles.title}>Register</Text>
+
+      {/* Username Input */}
+      <View style={styles.inputContainer}>
+        <TextInput
+          style={styles.input}
+          placeholder="Username"
+          placeholderTextColor="#A9A9A9"
+          value={username}
+          onChangeText={setUsername}
+        />
+      </View>
+
+      {/* Email Input */}
+      <View style={styles.inputContainer}>
+        <TextInput
+          style={styles.input}
+          placeholder="E-mail"
+          placeholderTextColor="#A9A9A9"
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+        />
+      </View>
+
+      {/* Password Input */}
+      <View style={styles.inputContainer}>
+        <TextInput
+          style={styles.input}
+          placeholder="Password"
+          placeholderTextColor="#A9A9A9"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry={!showPassword}
+        />
+        <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+          <Ionicons name={showPassword ? "eye-off" : "eye"} size={20} color="gray" />
+        </TouchableOpacity>
+      </View>
+
+      <Text style={styles.passwordHint}>must contain 8 char.</Text>
+
+      {/* Confirm Password Input */}
+      <View style={styles.inputContainer}>
+        <TextInput
+          style={styles.input}
+          placeholder="Confirm Password"
+          placeholderTextColor="#A9A9A9"
+          value={confirmPassword}
+          onChangeText={setConfirmPassword}
+          secureTextEntry={!showConfirmPassword}
+        />
+        <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
+          <Ionicons name={showConfirmPassword ? "eye-off" : "eye"} size={20} color="gray" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Create Account Button */}
+      <TouchableOpacity style={styles.button} onPress={handleSignUp}>
+        <Text style={styles.buttonText}>Create Account</Text>
+      </TouchableOpacity>
+
+      {/* Terms and Privacy */}
+      <Text style={styles.agreementText}>
+        By continuing, you agree to our <Text style={styles.linkText}>Terms of Service</Text> and <Text style={styles.linkText}>Privacy Policy</Text>.
+      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 20 },
-  input: { width: '100%', height: 40, borderColor: 'gray', borderWidth: 1, marginBottom: 10, paddingHorizontal: 10, borderRadius: 5 },
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FAF2DA',
+    padding: 20,
+  },
+  backButton: {
+    position: 'absolute',
+    top: 40,
+    left: 20,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    marginBottom: 30,
+    color: '#000',
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '90%',
+    backgroundColor: '#FFF',
+    borderRadius: 25,
+    paddingHorizontal: 20,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  input: {
+    flex: 1,
+    height: 50,
+    fontSize: 16,
+    color: '#000',
+  },
+  passwordHint: {
+    alignSelf: 'flex-start',
+    marginLeft: 25,
+    marginBottom: 10,
+    color: 'gray',
+  },
+  button: {
+    width: '90%',
+    backgroundColor: '#FF6F3C',
+    padding: 15,
+    borderRadius: 25,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  buttonText: {
+    fontSize: 18,
+    color: '#FFF',
+  },
+  agreementText: {
+    marginTop: 15,
+    fontSize: 14,
+    color: 'black',
+    textAlign: 'center',
+  },
+  linkText: {
+    color: '#3C9AFB',
+    textDecorationLine: 'underline',
+  },
 });
