@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { createUserWithEmailAndPassword, sendEmailVerification } from "firebase/auth";
-import { auth } from '../firebaseConfig'; // Make sure to import your Firebase config
+import { auth, db } from '../firebaseConfig'; // Make sure to import your Firebase config
 import { Ionicons } from '@expo/vector-icons';
 import BackButton from '../components/BackButton';
+import { doc, setDoc } from "firebase/firestore"; // Import setDoc to write to Firestore
 
 export default function SignUpScreen({ navigation }) {
   const [username, setUsername] = useState('');
@@ -13,34 +14,41 @@ export default function SignUpScreen({ navigation }) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const handleSignUp = async () => {
-    // Check if passwords match
-    if (password !== confirmPassword) {
-      Alert.alert("Error", "Passwords do not match");
-      return;
-    }
+  
+const handleSignUp = async () => {
+  if (password !== confirmPassword) {
+    Alert.alert("Error", "Passwords do not match");
+    return;
+  }
 
-    try {
-      // Create user with email and password
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
+  try {
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
 
-      // Send email verification link
-      await sendEmailVerification(user);
+    // Send email verification link
+    await sendEmailVerification(user);
 
-      // Show a message to inform the user to check their email
-      Alert.alert(
-        "Verify Your Email",
-        "A verification link has been sent to your email. Please verify before logging in."
-      );
+    // Create a document in Firestore for the user
+    await setDoc(doc(db, "users", user.uid), {
+      username: username,
+      email: email,
+      createdAt: new Date(),
+      lastLogin: null, // Set lastLogin to null initially
+    });    
 
-      // Navigate to the login screen after successful signup
-      navigation.navigate("Login");
+    Alert.alert(
+      "Verify Your Email",
+      "A verification link has been sent to your email. Please verify before logging in."
+    );
 
-    } catch (error) {
-      Alert.alert("Error", error.message);
-    }
-  };
+    navigation.navigate("Login");
+  } catch (error) {
+    Alert.alert("Error", error.message);
+  }
+};
+
+  
+  
 
   return (
     <View style={styles.container}>

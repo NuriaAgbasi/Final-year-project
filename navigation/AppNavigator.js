@@ -4,6 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
+
 // Import your screens
 import LoginScreen from '../screens/LoginScreen';
 import SignUpScreen from '../screens/SignUpscreen';
@@ -14,6 +15,8 @@ import CalendarScreen from '../screens/CalendarScreen';
 import CreateWorkoutScreen from '../screens/CreateWorkoutScreen';
 import PeopleScreen from '../screens/PeopleScreen';
 import ChatScreen from '../screens/ChatScreen';
+import HowToUse from '../screens/HowtoUse';
+
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -54,7 +57,6 @@ function BottomTabNavigator() {
 }
 
 // Main Stack Navigator
-// Main Stack Navigator
 export default function AppNavigator() {
   return (
     <NavigationContainer>
@@ -63,6 +65,7 @@ export default function AppNavigator() {
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="SignUp" component={SignUpScreen} />
         <Stack.Screen name="GoogleLogin" component={GoogleLoginScreen} />
+        <Stack.Screen name="HowToUse" component={HowToUse} />
         {/* Nest the BottomTabNavigator inside the StackNavigator */}
         <Stack.Screen name="HomeTabs" component={BottomTabNavigator} />
       </Stack.Navigator>

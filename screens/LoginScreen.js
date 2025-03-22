@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from '../firebaseConfig';
+import { auth, db } from '../firebaseConfig';
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import { Ionicons } from '@expo/vector-icons';
 import BackButton from '../components/BackButton';
 
@@ -9,7 +10,7 @@ export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-
+  
   const handleLogin = async () => {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
@@ -20,14 +21,29 @@ export default function LoginScreen({ navigation }) {
         return;
       }
   
-      Alert.alert("Welcome to the club");
+      const userDocRef = doc(db, "users", user.uid);
+      const userDoc = await getDoc(userDocRef);
   
-      // Navigate to the BottomTabNavigator which contains the Home screen
-      navigation.navigate("HomeTabs");
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        const lastLogin = userData.lastLogin;
+  
+        // Update lastLogin to the current date
+        await setDoc(userDocRef, { lastLogin: new Date() }, { merge: true });
+  
+        if (!lastLogin) {
+          navigation.navigate("HowToUse");
+        } else {
+          navigation.navigate("HomeTabs");
+        }
+      } else {
+        Alert.alert("Error", "User data not found.");
+      }
     } catch (error) {
       Alert.alert("Login Failed", error.message);
     }
   };
+  
   
 
   return (
@@ -63,17 +79,6 @@ export default function LoginScreen({ navigation }) {
 
       <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
         <Text style={styles.buttonText}>Login</Text>
-      </TouchableOpacity>
-
-      {/* Forgot Password */}
-      <TouchableOpacity>
-        <Text style={styles.forgotPassword}>Forgot Password?</Text>
-      </TouchableOpacity>
-
-      {/* Google Sign-In */}
-      <TouchableOpacity style={styles.googleButton}>
-        <Ionicons name="logo-google" size={24} color="#FF6F3C" />
-        <Text style={styles.googleButtonText}>Login with Google</Text>
       </TouchableOpacity>
     </View>
   );
