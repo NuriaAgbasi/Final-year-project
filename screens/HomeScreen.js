@@ -12,7 +12,7 @@ const friends = [
   { id: '4', name: 'Alex', location: 'Chicago, IL', image: require('../assets/friend4.jpg') },
 ];
 
-export default function HomeScreen() {
+export default function HomeScreen({navigation}) {
   return (
     <ScrollView style={styles.container}>
       {/* Header */}
@@ -52,7 +52,7 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
       <View style={styles.buttonRow}>
-        <TouchableOpacity style={styles.locationButton}>
+        <TouchableOpacity style={styles.locationButton} onPress={() => navigation.navigate('ProfileSetup')}>
           <Text style={styles.buttonText}>Los Angeles, CA</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.timeButton}>

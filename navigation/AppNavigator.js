@@ -15,7 +15,8 @@ import CalendarScreen from '../screens/CalendarScreen';
 import CreateWorkoutScreen from '../screens/CreateWorkoutScreen';
 import PeopleScreen from '../screens/PeopleScreen';
 import ChatScreen from '../screens/ChatScreen';
-import HowToUse from '../screens/HowtoUse';
+import HowToUse from '../screens/Tutorial-screens/HowtoUse';
+import ProfileSetup from '../screens/ProfileSetup';
 
 
 const Stack = createStackNavigator();
@@ -66,6 +67,7 @@ export default function AppNavigator() {
         <Stack.Screen name="SignUp" component={SignUpScreen} />
         <Stack.Screen name="GoogleLogin" component={GoogleLoginScreen} />
         <Stack.Screen name="HowToUse" component={HowToUse} />
+        <Stack.Screen name="ProfileSetup" component={ProfileSetup} />
         {/* Nest the BottomTabNavigator inside the StackNavigator */}
         <Stack.Screen name="HomeTabs" component={BottomTabNavigator} />
       </Stack.Navigator>
