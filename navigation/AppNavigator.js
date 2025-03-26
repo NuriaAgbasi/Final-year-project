@@ -17,6 +17,8 @@ import PeopleScreen from '../screens/PeopleScreen';
 import ChatScreen from '../screens/ChatScreen';
 import HowToUse from '../screens/Tutorial-screens/HowtoUse';
 import ProfileSetup from '../screens/ProfileSetup';
+import ProfileScreen from '../screens/ProfileScreen';
+
 
 
 const Stack = createStackNavigator();
@@ -68,6 +70,7 @@ export default function AppNavigator() {
         <Stack.Screen name="GoogleLogin" component={GoogleLoginScreen} />
         <Stack.Screen name="HowToUse" component={HowToUse} />
         <Stack.Screen name="ProfileSetup" component={ProfileSetup} />
+        <Stack.Screen name="Profile" component={ProfileScreen} />
         {/* Nest the BottomTabNavigator inside the StackNavigator */}
         <Stack.Screen name="HomeTabs" component={BottomTabNavigator} />
       </Stack.Navigator>

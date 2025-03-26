@@ -1,50 +1,76 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebaseConfig';
 import { collection, doc, setDoc } from "firebase/firestore";
-import { FlatList, View, Text, TextInput, TouchableOpacity, Image, Switch, StyleSheet } from 'react-native';
+import { FlatList, View, Text, TextInput, TouchableOpacity, Switch, StyleSheet, Alert } from 'react-native';
 import { getAuth } from 'firebase/auth';
 
-const ProfileSetup = () => {
+const API_URL = 'http://10.131.56.29:5000/api';
+
+const ProfileSetup = ({navigation}) => {
   const [step, setStep] = useState(1);
   const [age, setAge] = useState('');
   const [school, setSchool] = useState('');
   const [schoolSuggestions, setSchoolSuggestions] = useState([]);
   const [goToGym, setGoToGym] = useState(false);
   const [gymName, setGymName] = useState('');
-  const [gymSuggestions, setGymSuggestions] = useState([]);
-  const [selectedProfilePicture, setSelectedProfilePicture] = useState(null);
-
-  const availableProfilePictures = [
-    { id: '1', image: require('../assets/profile1.jpg') },
-    { id: '2', image: require('../assets/profile2.jpg') },
-    { id: '3', image: require('../assets/profile3.jpg') },
-    { id: '4', image: require('../assets/profile4.jpg') },
-  ];
-
-  const defaultProfilePicture = require('../assets/default-profile.jpg');
+  const [bio, setBio] = useState('');  // bio state variable
 
   const saveProfileToFirebase = async () => {
     const user = getAuth().currentUser;
-    const userId = user ? user.uid : null;
-
-    if (!userId) {
+    if (!user) {
       console.error("User not authenticated");
       return;
     }
 
-    try {
-      const profileData = {
-        age: age,
-        school: school,
-        goToGym: goToGym,
-        gymName: gymName,
-        profilePicture: selectedProfilePicture ? selectedProfilePicture.image : defaultProfilePicture,
-      };
+    console.log("User authenticated:", user.uid);
 
-      await setDoc(doc(db, "users", userId), profileData);
-      console.log('User profile saved to Firestore!');
+    // Prepare profile data
+    const profileData = {
+      userId: user.uid,
+      age,
+      school,
+      goToGym,
+      gymName,
+      bio,  // Ensure bio is included
+      profilePicture: null,
+    };    
+
+    console.log("Sending profile data to server:", profileData);  // Log the profile data
+
+    try {
+      const idToken = await user.getIdToken(true);  // Ensure token is refreshed
+      console.log("Sending token:", idToken);
+
+      const response = await fetch(`${API_URL}/profile`, {
+        method: "POST",
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`,  // Send token in the header
+        },
+        body: JSON.stringify(profileData),
+      });
+
+      const result = await response.json();
+      console.log("Server response:", result);
+
+      if (!response.ok) {
+        throw new Error(result.error || "Unknown error");
+      }
+
+      console.log("User profile saved successfully!");
+
+      // Show success alert after saving the profile
+      Alert.alert(
+        "Success",
+        "Your profile has been saved successfully!",
+        [
+          { text: "OK", onPress: () => navigation.replace('HomeTabs') }, // Navigate to HomeTabs (bottom tab navigator)
+        ],
+        { cancelable: false }
+      );
+
     } catch (error) {
-      console.error('Error saving profile to Firestore:', error);
+      console.error("Error saving profile:", error);
     }
   };
 
@@ -86,6 +112,16 @@ const ProfileSetup = () => {
                 value={school}
                 onChangeText={setSchool}
                 placeholder="Enter your school"
+              />
+              <Text>Bio:</Text>
+              <TextInput
+                style={styles.input}
+                value={bio}
+                onChangeText={(text) => {
+                  setBio(text);  // Update bio
+                }}
+                placeholder="Write a short bio"
+                multiline
               />
               {schoolSuggestions.length > 0 && (
                 <FlatList
@@ -133,17 +169,7 @@ const ProfileSetup = () => {
 
           {step === 3 && (
             <View>
-              <Text style={styles.title}>Choose a Profile Picture</Text>
-              <FlatList
-                data={availableProfilePictures}
-                horizontal
-                keyExtractor={(item) => item.id}
-                renderItem={({ item }) => (
-                  <TouchableOpacity onPress={() => setSelectedProfilePicture(item)}>
-                    <Image source={item.image} style={styles.profileImage} />
-                  </TouchableOpacity>
-                )}
-              />
+              <Text style={styles.title}>Review and Save Profile</Text>
               <TouchableOpacity style={styles.button} onPress={saveProfileToFirebase}>
                 <Text style={styles.buttonText}>Save Profile</Text>
               </TouchableOpacity>
@@ -185,14 +211,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#F0F0F0',
     marginVertical: 2,
     borderRadius: 8,
-  },
-  profileImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    marginRight: 10,
-    borderWidth: 2,
-    borderColor: '#ddd',
   },
   button: {
     backgroundColor: '#FF6B3C',

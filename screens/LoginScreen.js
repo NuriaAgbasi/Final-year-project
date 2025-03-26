@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth, db } from '../firebaseConfig';
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { Ionicons } from '@expo/vector-icons';
-import BackButton from '../components/BackButton';
+import { Alert, View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import AsyncStorage from "@react-native-async-storage/async-storage"; // Make sure to import AsyncStorage
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
@@ -16,6 +16,11 @@ export default function LoginScreen({ navigation }) {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
   
+      // Save the token to AsyncStorage
+      const token = await user.getIdToken();
+      await AsyncStorage.setItem("token", token);  // Store the token in AsyncStorage
+      console.log("Token saved successfully:", token); // Log to verify if it's saved
+
       if (!user.emailVerified) {
         Alert.alert("Email Not Verified", "Please verify your email before logging in.");
         return;
@@ -44,12 +49,8 @@ export default function LoginScreen({ navigation }) {
     }
   };
   
-  
-
   return (
     <View style={styles.container}>
-      <BackButton onPress={() => navigation.goBack()} />
-
       <Text style={styles.title}>Login</Text>
 
       <View style={styles.inputContainer}>
