@@ -4,7 +4,7 @@ import { collection, doc, setDoc } from "firebase/firestore";
 import { FlatList, View, Text, TextInput, TouchableOpacity, Switch, StyleSheet, Alert } from 'react-native';
 import { getAuth } from 'firebase/auth';
 
-const API_URL = 'http://10.131.56.29:5000/api';
+const API_URL = 'http://10.131.56.29:8081/api';
 
 const ProfileSetup = ({navigation}) => {
   const [step, setStep] = useState(1);

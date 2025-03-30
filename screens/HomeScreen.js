@@ -1,11 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, Image, StyleSheet, FlatList, ScrollView, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { getAuth } from 'firebase/auth';
+import { getAuth, onAuthStateChanged  } from 'firebase/auth';
+import { getFirestore, collection, onSnapshot } from 'firebase/firestore';
 import Chart from '../components/Chart.js';
-import BottomNavBar from '../components/BottomNavBar.js';
-
-const API_URL = 'http://10.131.56.29:5000/api';
 
 export default function HomeScreen({ navigation }) {
   const [profile, setProfile] = useState(null);
@@ -15,65 +13,42 @@ export default function HomeScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchData();
-  }, [getAuth().currentUser]);
-
-  const fetchData = async () => {
     const auth = getAuth();
-    const user = auth.currentUser;
-    if (!user) {
-      console.error('No user is currently signed in.');
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        console.error('No user is signed in.');
+        setLoading(false);
+        return;
+      }
+  
+      console.log('Fetching real-time data for:', user.email);
+      const db = getFirestore();
+      const userId = user.uid;
+  
+      // Real-time listeners
+      const friendsUnsub = onSnapshot(collection(db, 'users', userId, 'friends'), (snapshot) => {
+        setFriends(snapshot.docs.map(doc => doc.data()));
+      });
+  
+      const workoutsUnsub = onSnapshot(collection(db, 'users', userId, 'workouts'), (snapshot) => {
+        setWorkouts(snapshot.docs.map(doc => doc.data()));
+      });
+  
+      const notificationsUnsub = onSnapshot(collection(db, 'users', userId, 'notifications'), (snapshot) => {
+        setNotifications(snapshot.docs.map(doc => doc.data()));
+      });
+  
       setLoading(false);
-      return;
-    }
-
-    try {
-      const token = await user.getIdToken();
-      const headers = { Authorization: `Bearer ${token}` };
-
-      // Fetch data from multiple endpoints
-      const [profileRes, friendsRes, workoutsRes, notificationsRes] = await Promise.all([
-        fetch(`${API_URL}/profile`, { headers }),
-        fetch(`${API_URL}/friends`, { headers }),
-        fetch(`${API_URL}/workouts`, { headers }),
-        fetch(`${API_URL}/notifications`, { headers }),
-      ]);
-
-      // Check for unauthorized responses
-      if (!profileRes.ok || !friendsRes.ok || !workoutsRes.ok || !notificationsRes.ok) {
-        throw new Error('Error fetching data: Unauthorized or API error');
-      }
-
-      const profileData = await profileRes.json();
-      const friendsData = await friendsRes.json();
-      const workoutsData = await workoutsRes.json();
-      const notificationsData = await notificationsRes.json();
-
-      setProfile(profileData);
-      setFriends(friendsData);
-
-      // Check if workouts data is an array
-      if (Array.isArray(workoutsData)) {
-        setWorkouts(workoutsData);
-      } else {
-        console.error('Workouts data is not an array:', workoutsData);
-        setWorkouts([]); // Fallback to empty array if it's not an array
-      }
-
-      // Ensure notifications is an array before calling map
-      if (Array.isArray(notificationsData)) {
-        setNotifications(notificationsData);
-      } else {
-        console.error('Notifications data is not an array:', notificationsData);
-        setNotifications([]); // Fallback to empty array if it's not an array
-      }
-
-    } catch (error) {
-      console.error('Error fetching data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  
+      return () => {
+        friendsUnsub();
+        workoutsUnsub();
+        notificationsUnsub();
+        unsubscribeAuth(); // Cleanup authentication listener
+      };
+    });
+  
+  }, []);
 
   if (loading) {
     return <ActivityIndicator size="large" color="#FF6F3C" style={{ flex: 1, justifyContent: 'center' }} />;
@@ -88,12 +63,8 @@ export default function HomeScreen({ navigation }) {
           <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
             <Ionicons name="person-circle-outline" size={28} color="#333" style={styles.profileIcon} />
           </TouchableOpacity>
-
         </View>
       </View>
-
-      {/* User Info */}
-      {profile && <Text style={styles.subtitle}>Welcome, {profile.name || 'User'}!</Text>}
 
       {/* Friends List */}
       <Text style={styles.subtitle}>Your FFF's</Text>
@@ -103,15 +74,13 @@ export default function HomeScreen({ navigation }) {
         keyExtractor={(item) => item.friendId}
         renderItem={({ item }) => (
           <View style={styles.friendItem}>
-          <Image 
-            source={{ uri: 'https://upload.wikimedia.org/wikipedia/commons/2/2c/Default_pfp.svg' }} 
-            style={styles.friendImage} 
-            resizeMode="cover"  // Add resizeMode for proper scaling
-          />
-          <Text style={styles.friendName}>{item.name || 'Unknown'}</Text>
-        </View>
-        
-        
+            <Image 
+              source={{ uri: item.profilePicture || 'https://upload.wikimedia.org/wikipedia/commons/2/2c/Default_pfp.svg' }} 
+              style={styles.friendImage} 
+              resizeMode="cover"
+            />
+            <Text style={styles.friendName}>{item.name || 'Unknown'}</Text>
+          </View>
         )}
       />
 
@@ -121,11 +90,12 @@ export default function HomeScreen({ navigation }) {
       {/* Workouts List */}
       <Text style={styles.subtitle}>Your Workouts</Text>
       {workouts.length > 0 ? (
-        workouts.map((workout) => (
-          <View key={workout.id} style={styles.workoutItem}>
+        workouts.map((workout, index) => (
+          <View key={index} style={styles.workoutItem}>
             <Text style={styles.workoutText}>
-              {workout.name} - {new Date(workout.date._seconds * 1000).toLocaleDateString()}
+              {workout.name} - {workout.date ? new Date(workout.date.seconds * 1000).toLocaleDateString() : 'No date available'}
             </Text>
+            <Text>{workout.duration} minutes | Intensity: {workout.intensity}</Text>
           </View>
         ))
       ) : (
@@ -136,7 +106,12 @@ export default function HomeScreen({ navigation }) {
       <Text style={styles.subtitle}>Notifications</Text>
       {notifications.length > 0 ? (
         notifications.map((notif, index) => (
-          <Text key={index} style={styles.notificationText}>{notif.message}</Text>
+          <View key={index} style={styles.notificationContainer}>
+            <Text style={styles.notificationText}>{notif.message}</Text>
+            <Text style={styles.notificationDate}>
+              {notif.date ? new Date(notif.date.seconds * 1000).toLocaleDateString() : 'No date available'}
+            </Text>
+          </View>
         ))
       ) : (
         <Text style={styles.noNotificationsText}>No notifications available.</Text>
@@ -162,14 +137,10 @@ const styles = StyleSheet.create({
   workoutItem: { padding: 10, backgroundColor: '#FFD700', marginTop: 5, borderRadius: 10 },
   workoutText: { fontSize: 16, fontWeight: 'bold' },
   noWorkoutsText: { marginTop: 10, fontSize: 16, color: '#888' },
-  notificationText: { marginTop: 5, fontSize: 14, backgroundColor: '#FF6F3C', padding: 5, borderRadius: 5, color: '#FFF' },
+  notificationContainer: { marginTop: 10, backgroundColor: '#FF6F3C', padding: 10, borderRadius: 10 },
+  notificationText: { fontSize: 14, color: '#FFF' },
+  notificationDate: { fontSize: 12, color: '#FFF', marginTop: 5 },
   noNotificationsText: { marginTop: 10, fontSize: 16, color: '#888' },
   createButton: { backgroundColor: '#FF6F3C', padding: 15, borderRadius: 25, alignItems: 'center', marginVertical: 20 },
   createButtonText: { color: '#FFF', fontSize: 18 },
-  friendImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,  // Optional: makes it circular
-    backgroundColor: '#ddd', // Optional: background color in case image doesn't load
-  }  
 });
