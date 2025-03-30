@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, Image, StyleSheet, FlatList, ScrollView, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { getAuth, onAuthStateChanged  } from 'firebase/auth';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot } from 'firebase/firestore';
 import Chart from '../components/Chart.js';
 
@@ -11,6 +11,8 @@ export default function HomeScreen({ navigation }) {
   const [workouts, setWorkouts] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showMoreWorkouts, setShowMoreWorkouts] = useState(false);
+  const [showMoreNotifications, setShowMoreNotifications] = useState(false);
 
   useEffect(() => {
     const auth = getAuth();
@@ -20,38 +22,38 @@ export default function HomeScreen({ navigation }) {
         setLoading(false);
         return;
       }
-  
+      
       console.log('Fetching real-time data for:', user.email);
       const db = getFirestore();
       const userId = user.uid;
-  
-      // Real-time listeners
+      
       const friendsUnsub = onSnapshot(collection(db, 'users', userId, 'friends'), (snapshot) => {
         setFriends(snapshot.docs.map(doc => doc.data()));
       });
-  
+      
       const workoutsUnsub = onSnapshot(collection(db, 'users', userId, 'workouts'), (snapshot) => {
-        setWorkouts(snapshot.docs.map(doc => doc.data()));
+        const sortedWorkouts = snapshot.docs.map(doc => doc.data()).sort((a, b) => b.date?.seconds - a.date?.seconds);
+        setWorkouts(sortedWorkouts);
       });
-  
+      
       const notificationsUnsub = onSnapshot(collection(db, 'users', userId, 'notifications'), (snapshot) => {
-        setNotifications(snapshot.docs.map(doc => doc.data()));
+        const sortedNotifications = snapshot.docs.map(doc => doc.data()).sort((a, b) => b.date?.seconds - a.date?.seconds);
+        setNotifications(sortedNotifications);
       });
-  
+      
       setLoading(false);
-  
+      
       return () => {
         friendsUnsub();
         workoutsUnsub();
         notificationsUnsub();
-        unsubscribeAuth(); // Cleanup authentication listener
+        unsubscribeAuth();
       };
     });
-  
   }, []);
 
   if (loading) {
-    return <ActivityIndicator size="large" color="#FF6F3C" style={{ flex: 1, justifyContent: 'center' }} />;
+    return <ActivityIndicator size="large" color="#FF6F3C" style={styles.loader} />;
   }
 
   return (
@@ -65,8 +67,7 @@ export default function HomeScreen({ navigation }) {
           </TouchableOpacity>
         </View>
       </View>
-
-      {/* Friends List */}
+      
       <Text style={styles.subtitle}>Your FFF's</Text>
       <FlatList
         data={friends}
@@ -83,40 +84,35 @@ export default function HomeScreen({ navigation }) {
           </View>
         )}
       />
-
-      {/* Chart */}
+      
       <Chart />
-
-      {/* Workouts List */}
+      
       <Text style={styles.subtitle}>Your Workouts</Text>
-      {workouts.length > 0 ? (
-        workouts.map((workout, index) => (
-          <View key={index} style={styles.workoutItem}>
-            <Text style={styles.workoutText}>
-              {workout.name} - {workout.date ? new Date(workout.date.seconds * 1000).toLocaleDateString() : 'No date available'}
-            </Text>
-            <Text>{workout.duration} minutes | Intensity: {workout.intensity}</Text>
-          </View>
-        ))
-      ) : (
-        <Text style={styles.noWorkoutsText}>No workouts available.</Text>
+      {workouts.slice(0, showMoreWorkouts ? workouts.length : 4).map((workout, index) => (
+        <View key={index} style={styles.workoutItem}>
+          <Text style={styles.workoutText}>{workout.name} - {new Date(workout.date?.seconds * 1000).toLocaleDateString()}</Text>
+          <Text>{workout.duration} minutes | Intensity: {workout.intensity}</Text>
+        </View>
+      ))}
+      {workouts.length > 4 && (
+        <TouchableOpacity onPress={() => setShowMoreWorkouts(!showMoreWorkouts)}>
+          <Text style={styles.showMoreText}>{showMoreWorkouts ? 'Show Less' : 'Show More'}</Text>
+        </TouchableOpacity>
       )}
-
-      {/* Notifications */}
+      
       <Text style={styles.subtitle}>Notifications</Text>
-      {notifications.length > 0 ? (
-        notifications.map((notif, index) => (
-          <View key={index} style={styles.notificationContainer}>
-            <Text style={styles.notificationText}>{notif.message}</Text>
-            <Text style={styles.notificationDate}>
-              {notif.date ? new Date(notif.date.seconds * 1000).toLocaleDateString() : 'No date available'}
-            </Text>
-          </View>
-        ))
-      ) : (
-        <Text style={styles.noNotificationsText}>No notifications available.</Text>
+      {notifications.slice(0, showMoreNotifications ? notifications.length : 4).map((notif, index) => (
+        <View key={index} style={styles.notificationContainer}>
+          <Text style={styles.notificationText}>{notif.message}</Text>
+          <Text style={styles.notificationDate}>{new Date(notif.date?.seconds * 1000).toLocaleDateString()}</Text>
+        </View>
+      ))}
+      {notifications.length > 4 && (
+        <TouchableOpacity onPress={() => setShowMoreNotifications(!showMoreNotifications)}>
+          <Text style={styles.showMoreText}>{showMoreNotifications ? 'Show Less' : 'Show More'}</Text>
+        </TouchableOpacity>
       )}
-
+      
       <TouchableOpacity style={styles.createButton}>
         <Text style={styles.createButtonText}>Create a Workout</Text>
       </TouchableOpacity>
@@ -126,21 +122,21 @@ export default function HomeScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 20, backgroundColor: '#FAF2DA' },
+  loader: { flex: 1, justifyContent: 'center' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   title: { fontSize: 32, fontWeight: 'bold', color: '#333' },
   iconContainer: { flexDirection: 'row' },
   profileIcon: { marginLeft: 15 },
   subtitle: { marginTop: 20, fontSize: 20, color: '#333' },
   friendItem: { alignItems: 'center', marginHorizontal: 10 },
-  friendImage: { width: 60, height: 60, borderRadius: 30 },
+  friendImage: { width: 50, height: 50, borderRadius: 25 },
   friendName: { marginTop: 5, fontSize: 14, color: '#333' },
-  workoutItem: { padding: 10, backgroundColor: '#FFD700', marginTop: 5, borderRadius: 10 },
+  workoutItem: { padding: 12, backgroundColor: '#FFD700', marginTop: 5, borderRadius: 12 },
   workoutText: { fontSize: 16, fontWeight: 'bold' },
-  noWorkoutsText: { marginTop: 10, fontSize: 16, color: '#888' },
-  notificationContainer: { marginTop: 10, backgroundColor: '#FF6F3C', padding: 10, borderRadius: 10 },
+  showMoreText: { color: '#FF6F3C', textAlign: 'center', marginTop: 10, fontWeight: 'bold' },
+  notificationContainer: { marginTop: 10, backgroundColor: '#FF6F3C', padding: 12, borderRadius: 12 },
   notificationText: { fontSize: 14, color: '#FFF' },
   notificationDate: { fontSize: 12, color: '#FFF', marginTop: 5 },
-  noNotificationsText: { marginTop: 10, fontSize: 16, color: '#888' },
   createButton: { backgroundColor: '#FF6F3C', padding: 15, borderRadius: 25, alignItems: 'center', marginVertical: 20 },
   createButtonText: { color: '#FFF', fontSize: 18 },
 });
