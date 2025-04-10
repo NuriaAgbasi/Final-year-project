@@ -1,14 +1,64 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, ActivityIndicator, ScrollView } from "react-native";
+import { View, Text, StyleSheet, ActivityIndicator, ScrollView, Alert, Modal, TouchableOpacity, Pressable } from "react-native";
 import { auth, db } from "../firebaseConfig";
-import { getDocs, collection, doc, getDoc } from "firebase/firestore";
-import { useNavigation } from "@react-navigation/native";
+import { getDocs, collection, doc, getDoc, onSnapshot } from "firebase/firestore";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 
 const PeopleScreen = () => {
   const [loading, setLoading] = useState(true);
   const [recommendedUsers, setRecommendedUsers] = useState([]);
   const [users, setUsers] = useState([]);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [addingBuddy, setAddingBuddy] = useState(false);
   const navigation = useNavigation();
+
+  // Refresh recommendations when screen is focused
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log("Screen focused, refreshing recommendations");
+      fetchRecommendedUsers();
+      return () => {
+        // Cleanup if needed
+      };
+    }, [])
+  );
+
+  // Set up listeners for real-time updates
+  useEffect(() => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+
+    // Listen for changes to the user's friend list
+    const unsubscribeFriends = onSnapshot(
+      collection(db, "users", currentUser.uid, "friends"),
+      (snapshot) => {
+        console.log("Friends collection changed, refreshing recommendations");
+        fetchRecommendedUsers();
+      },
+      (error) => {
+        console.error("Error listening to friends collection:", error);
+      }
+    );
+
+    // Listen for changes to the user's own profile
+    const unsubscribeProfile = onSnapshot(
+      doc(db, "users", currentUser.uid),
+      (snapshot) => {
+        console.log("User profile changed, refreshing recommendations");
+        fetchRecommendedUsers();
+      },
+      (error) => {
+        console.error("Error listening to user profile:", error);
+      }
+    );
+
+    // Clean up listeners when component unmounts
+    return () => {
+      unsubscribeFriends();
+      unsubscribeProfile();
+    };
+  }, []);
 
   const getUserProfile = async (uid) => {
     try {
@@ -79,10 +129,14 @@ const PeopleScreen = () => {
       console.log("Response data:", responseData);
   
       if (response.ok) {
-        if (Array.isArray(responseData) && responseData.length > 0) {
+        if (Array.isArray(responseData)) {
           setRecommendedUsers(responseData);
+          if (responseData.length === 0) {
+            console.log("No recommendations available");
+          }
         } else {
-          Alert.alert("No Matches", "No recommendations found based on your preferences");
+          console.error("Invalid response format:", responseData);
+          Alert.alert("Error", "Invalid response format from server");
         }
       } else {
         Alert.alert("Error", responseData.error || "Failed to fetch recommendations");
@@ -90,6 +144,110 @@ const PeopleScreen = () => {
     } catch (error) {
       console.error("Error fetching recommendations:", error);
       Alert.alert("Error", "Failed to fetch recommendations. Please try again later.");
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const openUserModal = (user) => {
+    setSelectedUser(user);
+    setModalVisible(true);
+  };
+  
+  const addBuddy = async (user) => {
+    setAddingBuddy(true);
+    console.log("Adding buddy with user data:", JSON.stringify(user));
+
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        Alert.alert("Error", "You must be logged in to add a friend");
+        setAddingBuddy(false);
+        return;
+      }
+
+      // If userId is not available, try to use email instead
+      const requestBody = {};
+      if (user.userId) {
+        requestBody.friendId = user.userId;
+      } else if (user.email) {
+        requestBody.friendEmail = user.email;
+      } else {
+        Alert.alert("Error", "Cannot identify this user to add as a friend");
+        setAddingBuddy(false);
+        return;
+      }
+
+      console.log("Request body:", JSON.stringify(requestBody));
+
+      const response = await fetch("http://10.131.56.29:5000/api/friends", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${await currentUser.getIdToken()}`,
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      const data = await response.json();
+      console.log("Response from add friend API:", JSON.stringify(data));
+
+      if (response.ok) {
+        // Add friend to local state if needed
+        Alert.alert("Success", `${user.username} added to your buddies!`);
+        // Optionally, refresh recommendations to remove the added friend
+        fetchRecommendedUsers();
+      } else {
+        Alert.alert("Error", data.error || "Failed to add friend");
+      }
+    } catch (error) {
+      console.error("Error adding friend:", error);
+      Alert.alert("Error", "Failed to add friend. Please try again.");
+    } finally {
+      setAddingBuddy(false);
+      setModalVisible(false);
+    }
+  };
+  
+  const fetchRecommendedUsers = async () => {
+    console.log("Fetching recommended users...");
+  
+    if (!auth.currentUser) {
+      console.log("User not logged in, skipping recommendations fetch");
+      return;
+    }
+  
+    try {
+      setLoading(true);
+      const token = await auth.currentUser.getIdToken();  
+      console.log("Authorization token obtained");
+  
+      // Make API request with the Firebase ID token
+      const response = await fetch('http://10.131.56.29:5000/api/recommended', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+      });
+  
+      const responseData = await response.json();
+      console.log("Response data:", responseData);
+  
+      if (response.ok) {
+        if (Array.isArray(responseData)) {
+          setRecommendedUsers(responseData);
+          if (responseData.length === 0) {
+            console.log("No recommendations available");
+          }
+        } else {
+          console.error("Invalid response format:", responseData);
+        }
+      } else {
+        console.error("Error fetching recommendations:", responseData.error);
+      }
+    } catch (error) {
+      console.error("Error fetching recommendations:", error);
     } finally {
       setLoading(false);
     }
@@ -110,7 +268,11 @@ const PeopleScreen = () => {
               <Text style={styles.sectionTitle}>Recommended Workout Partners</Text>
               
               {recommendedUsers.map((user, index) => (
-                <View key={index} style={styles.card}>
+                <TouchableOpacity 
+                  key={index} 
+                  style={styles.card}
+                  onPress={() => openUserModal(user)}
+                >
                   <View style={styles.infoContainer}>
                     <Text style={styles.name}>{user.username}</Text>
                     <Text style={styles.details}>Age: {user.age || 'N/A'}</Text>
@@ -124,14 +286,71 @@ const PeopleScreen = () => {
                       </View>
                     )}
                   </View>
-                </View>
+                </TouchableOpacity>
               ))}
             </View>
           ) : (
             <View style={styles.noRecommendationsContainer}>
-              <Text style={styles.noRecommendationsText}>Loading recommendations...</Text>
+              <Text style={styles.noRecommendationsText}>No recommendations available</Text>
             </View>
           )}
+          
+          {/* User Details Modal */}
+          <Modal
+            animationType="slide"
+            transparent={true}
+            visible={modalVisible}
+            onRequestClose={() => setModalVisible(false)}
+          >
+            <View style={styles.centeredView}>
+              <View style={styles.modalView}>
+                {selectedUser && (
+                  <>
+                    <View style={styles.modalHeader}>
+                      <Text style={styles.modalTitle}>{selectedUser.username}</Text>
+                      <TouchableOpacity 
+                        style={styles.closeModalButton}
+                        onPress={() => setModalVisible(false)}
+                      >
+                        <Text style={styles.closeModalButtonText}>×</Text>
+                      </TouchableOpacity>
+                    </View>
+                    
+                    <View style={styles.modalContent}>
+                      <View style={styles.modalInfoItem}>
+                        <Text style={styles.modalInfoLabel}>Age:</Text>
+                        <Text style={styles.modalInfoValue}>{selectedUser.age || 'N/A'}</Text>
+                      </View>
+                      
+                      <View style={styles.modalInfoItem}>
+                        <Text style={styles.modalInfoLabel}>Gym:</Text>
+                        <Text style={styles.modalInfoValue}>{selectedUser.gymName || 'N/A'}</Text>
+                      </View>
+                      
+                      {selectedUser.bio && (
+                        <View style={styles.modalBioContainer}>
+                          <Text style={styles.modalInfoLabel}>Bio:</Text>
+                          <Text style={styles.modalBioText}>{selectedUser.bio}</Text>
+                        </View>
+                      )}
+                    </View>
+                    
+                    <TouchableOpacity
+                      style={styles.addBuddyButton}
+                      onPress={() => addBuddy(selectedUser)}
+                      disabled={addingBuddy}
+                    >
+                      {addingBuddy ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text style={styles.addBuddyButtonText}>Add Buddy</Text>
+                      )}
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
+            </View>
+          </Modal>
         </>
       )}
     </ScrollView>
@@ -215,7 +434,91 @@ const styles = StyleSheet.create({
   noRecommendationsText: {
     fontSize: 18,
     color: "#666"
-  }
+  },
+  centeredView: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.5)"
+  },
+  modalView: {
+    width: "85%",
+    backgroundColor: "white",
+    borderRadius: 20,
+    padding: 0,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+    overflow: "hidden"
+  },
+  modalHeader: {
+    backgroundColor: "#FF6B3C",
+    padding: 15,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center"
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "white"
+  },
+  closeModalButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "rgba(255, 255, 255, 0.3)",
+    justifyContent: "center",
+    alignItems: "center"
+  },
+  closeModalButtonText: {
+    fontSize: 20,
+    color: "white",
+    fontWeight: "bold"
+  },
+  modalContent: {
+    padding: 20
+  },
+  modalInfoItem: {
+    flexDirection: "row",
+    marginBottom: 12
+  },
+  modalInfoLabel: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#555",
+    width: 50
+  },
+  modalInfoValue: {
+    fontSize: 16,
+    color: "#333",
+    flex: 1
+  },
+  modalBioContainer: {
+    marginTop: 5
+  },
+  modalBioText: {
+    fontSize: 16,
+    color: "#333",
+    marginTop: 5,
+    lineHeight: 22
+  },
+  addBuddyButton: {
+    backgroundColor: "#FF6B3C",
+    padding: 15,
+    alignItems: "center",
+    marginTop: 10
+  },
+  addBuddyButtonText: {
+    color: "white",
+    fontWeight: "bold",
+    fontSize: 16
+  },
 });
 
 export default PeopleScreen;

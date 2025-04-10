@@ -72,7 +72,7 @@ export default function HomeScreen({ navigation }) {
       <FlatList
         data={friends}
         horizontal
-        keyExtractor={(item) => item.friendId}
+        keyExtractor={(item, index) => item.id || index.toString()}
         renderItem={({ item }) => (
           <View style={styles.friendItem}>
             {/* <Image 
