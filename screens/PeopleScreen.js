@@ -166,11 +166,9 @@ const PeopleScreen = () => {
       // Get or generate a user ID for the friend
       let friendId = user.userId;
       if (!friendId) {
-        // If no userId exists, check if we have email
         if (!user.email) {
           throw new Error('Cannot add user - missing identification');
         }
-        // Look up user by email to get their ID
         const usersRef = collection(db, 'users');
         const q = query(usersRef, where('email', '==', user.email));
         const querySnapshot = await getDocs(q);
@@ -186,31 +184,29 @@ const PeopleScreen = () => {
       const currentUserDoc = await getDoc(doc(db, 'users', currentUser.uid));
       const currentUserData = currentUserDoc.data();
       
-      // Prepare friend data
+      // Prepare friend data - use usernames for both users
       const currentUserFriendData = {
         userId: currentUser.uid,
-        name: currentUser.displayName || currentUser.email.split('@')[0] || 'You',
+        name: currentUserData?.username || currentUser.displayName || currentUser.email.split('@')[0] || 'You',
         addedAt: serverTimestamp(),
         gym: currentUserData?.gym || null
       };
       
       const newFriendData = {
         userId: friendId,
-        name: user.username || 'New Friend',
+        name: user.username || 'New Friend',  // Always use username if available
         addedAt: serverTimestamp(),
         gym: user.gymName || null
       };
       
-      // Batch write to ensure atomic operation
+      // Batch write
       const batch = writeBatch(db);
       
-      // Add friend to current user's list
       batch.set(
         doc(db, 'users', currentUser.uid, 'friends', friendId),
         newFriendData
       );
       
-      // Add current user to friend's list
       batch.set(
         doc(db, 'users', friendId, 'friends', currentUser.uid),
         currentUserFriendData
@@ -267,19 +263,27 @@ const PeopleScreen = () => {
           );
           
           // Prioritize same gym members
-          const sameGymRecommendations = filteredRecommendations.filter(
-            user => user.gymName === auth.currentUser.gym
-          );
+          const sameGymRecommendations = filteredRecommendations
+            .filter(user => user.gymName === auth.currentUser.gym)
+            .slice(0, 5); // Take up to 5 same gym recommendations
           
-          const otherRecommendations = filteredRecommendations.filter(
-            user => user.gymName !== auth.currentUser.gym
-          );
+          // Get remaining recommendations (up to 5 total)
+          const remainingSlots = Math.max(0, 5 - sameGymRecommendations.length);
+          const otherRecommendations = filteredRecommendations
+            .filter(user => user.gymName !== auth.currentUser.gym)
+            .slice(0, remainingSlots);
           
-          // Combine with same gym first
-          setRecommendedUsers([
+          // Combine recommendations
+          const finalRecommendations = [
             ...sameGymRecommendations,
             ...otherRecommendations
-          ]);
+          ];
+          
+          setRecommendedUsers(finalRecommendations);
+          
+          if (finalRecommendations.length === 0) {
+            console.log("No recommendations available after filtering");
+          }
         }
       } else {
         Alert.alert("Error", responseData.error || "Failed to get recommendations");
