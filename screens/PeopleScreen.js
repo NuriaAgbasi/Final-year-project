@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, ActivityIndicator, ScrollView, Alert, Modal, TouchableOpacity, Pressable } from "react-native";
-import { auth, db } from "../firebaseConfig";
-import { getDocs, collection, doc, getDoc, onSnapshot } from "firebase/firestore";
+import { auth, db } from '../firebaseConfig';
+import { doc, setDoc, serverTimestamp, writeBatch, getDoc, collection, getDocs, onSnapshot, query, where } from 'firebase/firestore';
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 
 const PeopleScreen = () => {
@@ -94,28 +94,28 @@ const PeopleScreen = () => {
       console.log("Fetched users from Firestore:", userList);
       setUsers(userList);
       setLoading(false);
-      
+
       // Automatically fetch recommendations after users are loaded
       handleRecommendation();
     };
-    
+
 
     fetchUsers();
   }, []);
 
   const handleRecommendation = async () => {
     console.log("Recommendation button clicked.");
-  
+
     if (!auth.currentUser) {
       Alert.alert("Error", "Please log in to get recommendations");
       return;
     }
-  
+
     try {
       setLoading(true);
-      const token = await auth.currentUser.getIdToken();  
+      const token = await auth.currentUser.getIdToken();
       console.log("Authorization token obtained");
-  
+
       // Make API request with the Firebase ID token
       const response = await fetch('http://10.131.56.29:5000/api/recommended', {
         method: 'GET',
@@ -124,10 +124,10 @@ const PeopleScreen = () => {
           'Content-Type': 'application/json'
         },
       });
-  
+
       const responseData = await response.json();
       console.log("Response data:", responseData);
-  
+
       if (response.ok) {
         if (Array.isArray(responseData)) {
           setRecommendedUsers(responseData);
@@ -148,80 +148,105 @@ const PeopleScreen = () => {
       setLoading(false);
     }
   };
-  
+
   const openUserModal = (user) => {
     setSelectedUser(user);
     setModalVisible(true);
   };
-  
+
   const addBuddy = async (user) => {
-    setAddingBuddy(true);
-    console.log("Adding buddy with user data:", JSON.stringify(user));
-
     try {
+      setAddingBuddy(true);
       const currentUser = auth.currentUser;
-      if (!currentUser) {
-        Alert.alert("Error", "You must be logged in to add a friend");
-        setAddingBuddy(false);
-        return;
+      
+      if (!currentUser?.uid) {
+        throw new Error('You must be logged in to add friends');
       }
-
-      // If userId is not available, try to use email instead
-      const requestBody = {};
-      if (user.userId) {
-        requestBody.friendId = user.userId;
-      } else if (user.email) {
-        requestBody.friendEmail = user.email;
-      } else {
-        Alert.alert("Error", "Cannot identify this user to add as a friend");
-        setAddingBuddy(false);
-        return;
+      
+      // Get or generate a user ID for the friend
+      let friendId = user.userId;
+      if (!friendId) {
+        // If no userId exists, check if we have email
+        if (!user.email) {
+          throw new Error('Cannot add user - missing identification');
+        }
+        // Look up user by email to get their ID
+        const usersRef = collection(db, 'users');
+        const q = query(usersRef, where('email', '==', user.email));
+        const querySnapshot = await getDocs(q);
+        
+        if (querySnapshot.empty) {
+          throw new Error('User not found in system');
+        }
+        
+        friendId = querySnapshot.docs[0].id;
       }
-
-      console.log("Request body:", JSON.stringify(requestBody));
-
-      const response = await fetch("http://10.131.56.29:5000/api/friends", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${await currentUser.getIdToken()}`,
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      const data = await response.json();
-      console.log("Response from add friend API:", JSON.stringify(data));
-
-      if (response.ok) {
-        // Add friend to local state if needed
-        Alert.alert("Success", `${user.username} added to your buddies!`);
-        // Optionally, refresh recommendations to remove the added friend
-        fetchRecommendedUsers();
-      } else {
-        Alert.alert("Error", data.error || "Failed to add friend");
-      }
+      
+      // Get current user's data
+      const currentUserDoc = await getDoc(doc(db, 'users', currentUser.uid));
+      const currentUserData = currentUserDoc.data();
+      
+      // Prepare friend data
+      const currentUserFriendData = {
+        userId: currentUser.uid,
+        name: currentUser.displayName || currentUser.email.split('@')[0] || 'You',
+        addedAt: serverTimestamp(),
+        gym: currentUserData?.gym || null
+      };
+      
+      const newFriendData = {
+        userId: friendId,
+        name: user.username || 'New Friend',
+        addedAt: serverTimestamp(),
+        gym: user.gymName || null
+      };
+      
+      // Batch write to ensure atomic operation
+      const batch = writeBatch(db);
+      
+      // Add friend to current user's list
+      batch.set(
+        doc(db, 'users', currentUser.uid, 'friends', friendId),
+        newFriendData
+      );
+      
+      // Add current user to friend's list
+      batch.set(
+        doc(db, 'users', friendId, 'friends', currentUser.uid),
+        currentUserFriendData
+      );
+      
+      await batch.commit();
+      Alert.alert('Success', `You and ${newFriendData.name} are now buddies!`);
+      fetchRecommendedUsers();
+      
     } catch (error) {
-      console.error("Error adding friend:", error);
-      Alert.alert("Error", "Failed to add friend. Please try again.");
+      console.error('Add friend error:', error);
+      Alert.alert('Error', error.message || 'Failed to add friend');
     } finally {
       setAddingBuddy(false);
       setModalVisible(false);
     }
   };
-  
+
   const fetchRecommendedUsers = async () => {
     console.log("Fetching recommended users...");
-  
+
     if (!auth.currentUser) {
       console.log("User not logged in, skipping recommendations fetch");
       return;
     }
-  
+
     try {
       setLoading(true);
-      const token = await auth.currentUser.getIdToken();  
+      const token = await auth.currentUser.getIdToken();
       console.log("Authorization token obtained");
-  
+
+      // Get current friends list first
+      const friendsRef = collection(db, 'users', auth.currentUser.uid, 'friends');
+      const friendsSnapshot = await getDocs(friendsRef);
+      const friendIds = friendsSnapshot.docs.map(doc => doc.id);
+
       // Make API request with the Firebase ID token
       const response = await fetch('http://10.131.56.29:5000/api/recommended', {
         method: 'GET',
@@ -230,29 +255,43 @@ const PeopleScreen = () => {
           'Content-Type': 'application/json'
         },
       });
-  
+
       const responseData = await response.json();
       console.log("Response data:", responseData);
-  
+
       if (response.ok) {
         if (Array.isArray(responseData)) {
-          setRecommendedUsers(responseData);
-          if (responseData.length === 0) {
-            console.log("No recommendations available");
-          }
-        } else {
-          console.error("Invalid response format:", responseData);
+          // Filter out already added friends
+          const filteredRecommendations = responseData.filter(
+            user => !friendIds.includes(user.userId)
+          );
+          
+          // Prioritize same gym members
+          const sameGymRecommendations = filteredRecommendations.filter(
+            user => user.gymName === auth.currentUser.gym
+          );
+          
+          const otherRecommendations = filteredRecommendations.filter(
+            user => user.gymName !== auth.currentUser.gym
+          );
+          
+          // Combine with same gym first
+          setRecommendedUsers([
+            ...sameGymRecommendations,
+            ...otherRecommendations
+          ]);
         }
       } else {
-        console.error("Error fetching recommendations:", responseData.error);
+        Alert.alert("Error", responseData.error || "Failed to get recommendations");
       }
     } catch (error) {
       console.error("Error fetching recommendations:", error);
+      Alert.alert("Error", "Failed to get recommendations");
     } finally {
       setLoading(false);
     }
   };
-  
+
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.title}>Friendship Recommendations</Text>
@@ -266,10 +305,10 @@ const PeopleScreen = () => {
           {recommendedUsers.length > 0 ? (
             <View style={styles.recommendationsContainer}>
               <Text style={styles.sectionTitle}>Recommended Workout Partners</Text>
-              
+
               {recommendedUsers.map((user, index) => (
-                <TouchableOpacity 
-                  key={index} 
+                <TouchableOpacity
+                  key={index}
                   style={styles.card}
                   onPress={() => openUserModal(user)}
                 >
@@ -294,7 +333,7 @@ const PeopleScreen = () => {
               <Text style={styles.noRecommendationsText}>No recommendations available</Text>
             </View>
           )}
-          
+
           {/* User Details Modal */}
           <Modal
             animationType="slide"
@@ -308,25 +347,25 @@ const PeopleScreen = () => {
                   <>
                     <View style={styles.modalHeader}>
                       <Text style={styles.modalTitle}>{selectedUser.username}</Text>
-                      <TouchableOpacity 
+                      <TouchableOpacity
                         style={styles.closeModalButton}
                         onPress={() => setModalVisible(false)}
                       >
                         <Text style={styles.closeModalButtonText}>×</Text>
                       </TouchableOpacity>
                     </View>
-                    
+
                     <View style={styles.modalContent}>
                       <View style={styles.modalInfoItem}>
                         <Text style={styles.modalInfoLabel}>Age:</Text>
                         <Text style={styles.modalInfoValue}>{selectedUser.age || 'N/A'}</Text>
                       </View>
-                      
+
                       <View style={styles.modalInfoItem}>
                         <Text style={styles.modalInfoLabel}>Gym:</Text>
                         <Text style={styles.modalInfoValue}>{selectedUser.gymName || 'N/A'}</Text>
                       </View>
-                      
+
                       {selectedUser.bio && (
                         <View style={styles.modalBioContainer}>
                           <Text style={styles.modalInfoLabel}>Bio:</Text>
@@ -334,7 +373,7 @@ const PeopleScreen = () => {
                         </View>
                       )}
                     </View>
-                    
+
                     <TouchableOpacity
                       style={styles.addBuddyButton}
                       onPress={() => addBuddy(selectedUser)}
@@ -358,10 +397,10 @@ const PeopleScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    padding: 20, 
-    backgroundColor: "#FAF3E0" 
+  container: {
+    flex: 1,
+    padding: 20,
+    backgroundColor: "#FAF3E0"
   },
   title: {
     fontSize: 24,
@@ -375,8 +414,8 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 10,
   },
-  loader: { 
-    flex: 1, 
+  loader: {
+    flex: 1,
     justifyContent: "center",
     height: 200
   },

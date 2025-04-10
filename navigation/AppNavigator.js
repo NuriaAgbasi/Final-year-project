@@ -41,9 +41,7 @@ function BottomTabNavigator() {
               iconName = 'add-circle-outline';
             } else if (route.name === 'People') {
               iconName = 'people-outline';
-            } else if (route.name === 'Chat') {
-              iconName = 'chatbubble-outline';
-            }
+            } 
             return <Ionicons name={iconName} size={size} color={color} />;
           },
           tabBarActiveTintColor: '#FF6F3C',
@@ -55,7 +53,17 @@ function BottomTabNavigator() {
         <Tab.Screen name="Calendar" component={CalendarScreen} />
         <Tab.Screen name="Create Workout" component={CreateWorkoutScreen} />
         <Tab.Screen name="People" component={PeopleScreen} />
-        <Tab.Screen name="Chat" component={ChatScreen} />
+        <Tab.Screen 
+          name="Chat" 
+          component={ChatScreen} 
+          options={{ 
+            title: 'Chat',
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="chatbubbles" size={size} color={color} />
+            ),
+            headerShown: false
+          }}
+        />
       </Tab.Navigator>
 
       {/* SOS Button (Always Visible on Bottom Right) */}
