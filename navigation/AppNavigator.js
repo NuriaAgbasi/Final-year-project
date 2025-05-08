@@ -19,12 +19,9 @@ import HowToUse from '../screens/Tutorial-screens/HowtoUse';
 import ProfileSetup from '../screens/ProfileSetup';
 import ProfileScreen from '../screens/ProfileScreen';
 
-
-
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
-// Bottom Tab Navigator with SOS Button
 function BottomTabNavigator() {
   return (
     <View style={{ flex: 1 }}>
@@ -41,7 +38,7 @@ function BottomTabNavigator() {
               iconName = 'add-circle-outline';
             } else if (route.name === 'People') {
               iconName = 'people-outline';
-            } 
+            }
             return <Ionicons name={iconName} size={size} color={color} />;
           },
           tabBarActiveTintColor: '#FF6F3C',
@@ -65,14 +62,10 @@ function BottomTabNavigator() {
           }}
         />
       </Tab.Navigator>
-
-      {/* SOS Button (Always Visible on Bottom Right) */}
-      
     </View>
   );
 }
 
-// Main Stack Navigator
 export default function AppNavigator() {
   return (
     <NavigationContainer>
@@ -84,8 +77,6 @@ export default function AppNavigator() {
         <Stack.Screen name="HowToUse" component={HowToUse} />
         <Stack.Screen name="ProfileSetup" component={ProfileSetup} />
         <Stack.Screen name="Profile" component={ProfileScreen} />
-        
-        {/* Bottom Tab Navigator with SOS Button */}
         <Stack.Screen name="HomeTabs" component={BottomTabNavigator} options={{ headerShown: false }} />
       </Stack.Navigator>
     </NavigationContainer>

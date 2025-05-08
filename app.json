@@ -3,26 +3,32 @@
     "name": "MyNewApp",
     "slug": "MyNewApp",
     "version": "1.0.0",
+    "sdkVersion": "53.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
-      "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.anonymous.MyNewApp",
+      "infoPlist": {
+        "NSHealthShareUsageDescription": "This app uses HealthKit to access your workout data",
+        "NSHealthUpdateUsageDescription": "This app uses HealthKit to save workout data"
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.anonymous.MyNewApp"
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
+    "web": {},
+    "plugins": [],
+    "dependencies": {
+      "@react-native-google-signin/google-signin": "^8.0.0"
     }
   }
 }
